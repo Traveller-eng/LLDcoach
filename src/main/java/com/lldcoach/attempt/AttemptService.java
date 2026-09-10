@@ -91,4 +91,12 @@ public class AttemptService {
         attempt.setUpdatedAt(Instant.now());
         return attempt;
     }
+
+    public void updateStatus(String attemptId, AttemptStatus status) {
+        Attempt attempt = attemptStore.get(attemptId);
+        if (attempt != null) {
+            attempt.setStatus(status);
+            attempt.setUpdatedAt(Instant.now());
+        }
+    }
 }
