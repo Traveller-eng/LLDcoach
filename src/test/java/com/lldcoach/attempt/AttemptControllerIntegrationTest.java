@@ -141,4 +141,107 @@ public class AttemptControllerIntegrationTest {
                 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
+
+    @Test
+    public void getAllAttempts_returnsAttemptsOrderedNewestFirst() throws InterruptedException {
+        // Start two attempts
+        ResponseEntity<Attempt> startResponse1 = restTemplate.postForEntity(
+                "/api/problems/" + validProblemId + "/attempts", null, Attempt.class);
+        Thread.sleep(10); // Ensure different updated times
+        ResponseEntity<Attempt> startResponse2 = restTemplate.postForEntity(
+                "/api/problems/" + validProblemId + "/attempts", null, Attempt.class);
+
+        ResponseEntity<List<AttemptHistoryResponse>> response = restTemplate.exchange(
+                "/api/attempts",
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<AttemptHistoryResponse>>() {}
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<AttemptHistoryResponse> attempts = response.getBody();
+        assertTrue(attempts.size() >= 2);
+        
+        // Find our two attempts and ensure attempt2 comes before attempt1
+        int idx1 = -1, idx2 = -1;
+        for (int i = 0; i < attempts.size(); i++) {
+            if (attempts.get(i).getId().equals(startResponse1.getBody().getId())) idx1 = i;
+            if (attempts.get(i).getId().equals(startResponse2.getBody().getId())) idx2 = i;
+        }
+        assertTrue(idx1 != -1 && idx2 != -1);
+        assertTrue(idx2 < idx1); // attempt2 is newer, so smaller index
+    }
+
+    @Test
+    public void getAttemptsByProblemId_existingProblem_returnsOnlyThatProblemAttempts() {
+        ResponseEntity<Attempt> startResponse = restTemplate.postForEntity(
+                "/api/problems/" + validProblemId + "/attempts", null, Attempt.class);
+
+        ResponseEntity<List<AttemptHistoryResponse>> response = restTemplate.exchange(
+                "/api/problems/" + validProblemId + "/attempts",
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<AttemptHistoryResponse>>() {}
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<AttemptHistoryResponse> attempts = response.getBody();
+        assertFalse(attempts.isEmpty());
+        for (AttemptHistoryResponse attempt : attempts) {
+            assertEquals(validProblemId, attempt.getProblemId());
+        }
+    }
+
+    @Test
+    public void getAttemptsByProblemId_nonexistentProblem_returns404() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "/api/problems/nonexistent-problem-id/attempts", String.class);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    @Test
+    public void getAttemptsByProblemId_existingProblemNoAttempts_returnsEmptyList() {
+        ResponseEntity<Problem[]> problemsResponse = restTemplate.getForEntity("/api/problems", Problem[].class);
+        String secondProblemId = problemsResponse.getBody()[2].getId();
+        
+        ResponseEntity<List<AttemptHistoryResponse>> response = restTemplate.exchange(
+                "/api/problems/" + secondProblemId + "/attempts",
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<AttemptHistoryResponse>>() {}
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isEmpty());
+    }
+
+    @Test
+    public void historyIncludesEvaluationScoreAfterSuccessfulEvaluation() {
+        ResponseEntity<Attempt> startResponse = restTemplate.postForEntity(
+                "/api/problems/" + validProblemId + "/attempts", null, Attempt.class);
+        String attemptId = startResponse.getBody().getId();
+        
+        Submission update = new Submission("design class", "code public", "explanation extend");
+        restTemplate.put("/api/attempts/" + attemptId, update);
+        restTemplate.postForEntity("/api/attempts/" + attemptId + "/submit", null, Attempt.class);
+        
+        restTemplate.postForEntity("/api/attempts/" + attemptId + "/evaluate", null, String.class);
+        
+        ResponseEntity<List<AttemptHistoryResponse>> response = restTemplate.exchange(
+                "/api/attempts",
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<AttemptHistoryResponse>>() {}
+        );
+        
+        List<AttemptHistoryResponse> attempts = response.getBody();
+        AttemptHistoryResponse evaluatedAttempt = attempts.stream()
+                .filter(a -> a.getId().equals(attemptId))
+                .findFirst()
+                .orElse(null);
+                
+        assertNotNull(evaluatedAttempt);
+        assertEquals(AttemptStatus.COMPLETED, evaluatedAttempt.getStatus());
+        assertNotNull(evaluatedAttempt.getEvaluationScore());
+    }
 }

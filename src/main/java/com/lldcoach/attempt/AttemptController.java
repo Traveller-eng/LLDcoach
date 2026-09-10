@@ -4,14 +4,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.lldcoach.evaluation.EvaluationService;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api")
 public class AttemptController {
 
     private final AttemptService attemptService;
+    private final EvaluationService evaluationService;
 
-    public AttemptController(AttemptService attemptService) {
+    public AttemptController(AttemptService attemptService, EvaluationService evaluationService) {
         this.attemptService = attemptService;
+        this.evaluationService = evaluationService;
     }
 
     @PostMapping("/problems/{problemId}/attempts")
@@ -26,6 +31,42 @@ public class AttemptController {
         return attemptService.getAttempt(attemptId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/attempts")
+    public ResponseEntity<List<AttemptHistoryResponse>> getAllAttempts() {
+        List<AttemptHistoryResponse> responses = attemptService.getAllAttempts().stream()
+                .map(this::toHistoryResponse)
+                .toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    @GetMapping("/problems/{problemId}/attempts")
+    public ResponseEntity<List<AttemptHistoryResponse>> getAttemptsByProblemId(@PathVariable String problemId) {
+        return attemptService.getAttemptsByProblemId(problemId)
+                .map(attempts -> {
+                    List<AttemptHistoryResponse> responses = attempts.stream()
+                            .map(this::toHistoryResponse)
+                            .toList();
+                    return ResponseEntity.ok(responses);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    private AttemptHistoryResponse toHistoryResponse(Attempt attempt) {
+        AttemptHistoryResponse res = new AttemptHistoryResponse();
+        res.setId(attempt.getId());
+        res.setProblemId(attempt.getProblemId());
+        res.setStatus(attempt.getStatus());
+        res.setSubmission(attempt.getSubmission());
+        res.setCreatedAt(attempt.getCreatedAt());
+        res.setUpdatedAt(attempt.getUpdatedAt());
+
+        if (attempt.getStatus() == AttemptStatus.COMPLETED) {
+            evaluationService.getEvaluationByAttemptId(attempt.getId())
+                    .ifPresent(eval -> res.setEvaluationScore(eval.getOverallScore()));
+        }
+        return res;
     }
 
     @PutMapping("/attempts/{attemptId}")
