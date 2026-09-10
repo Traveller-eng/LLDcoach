@@ -40,6 +40,23 @@ public class AttemptService {
         return Optional.ofNullable(attemptStore.get(attemptId));
     }
 
+    public java.util.List<Attempt> getAllAttempts() {
+        return attemptStore.values().stream()
+                .sorted((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()))
+                .toList();
+    }
+
+    public Optional<java.util.List<Attempt>> getAttemptsByProblemId(String problemId) {
+        if (problemService.getProblemById(problemId).isEmpty()) {
+            return Optional.empty();
+        }
+        java.util.List<Attempt> attempts = attemptStore.values().stream()
+                .filter(a -> a.getProblemId().equals(problemId))
+                .sorted((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()))
+                .toList();
+        return Optional.of(attempts);
+    }
+
     public Attempt updateDraft(String attemptId, Submission submissionUpdate) {
         Attempt attempt = attemptStore.get(attemptId);
         if (attempt == null) {
