@@ -1,0 +1,12 @@
+```
+# Compiled and build artifacts
+*.class
+target/
+# Dependencies
+# Environment
+.env
+.env.local
+.env.*
+# Editors
+.vscode/
+```
